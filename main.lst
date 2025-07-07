@@ -1,0 +1,1009 @@
+   1               	;*---------------------------------------------------------------------------*
+   2               	;* main.asm                                                                  *
+   3               	;* Copyright (C) 2025  Jacques Pelletier                                     *
+   4               	;*                                                                           *
+   5               	;* This program is free software; you can redistribute it and *or            *
+   6               	;* modify it under the terms of the GNU General Public License               *
+   7               	;* as published by the Free Software Foundation; either version 2            *
+   8               	;* of the License, or (at your option) any later version.                    *
+   9               	;*                                                                           *
+  10               	;* This program is distributed in the hope that it will be useful,           *
+  11               	;* but WITHOUT ANY WARRANTY; without even the implied warranty of            *
+  12               	;* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the             *
+  13               	;* GNU General Public License for more details.                              *
+  14               	;*                                                                           *
+  15               	;* You should have received a copy of the GNU General Public License         *
+  16               	;* along with this program; if not, write to the Free Software Foundation,   *
+  17               	;* Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.           *
+  18               	;*---------------------------------------------------------------------------*
+  19               	;2 digits 7 segments LCD pin out
+  20               	;1/4 Duty 1/2 Bias
+  21               	;CPU	Pin		Function
+  22               	;PC0	 1		1F,1G,1E
+  23               	;PC1	 2		1A,1B,1C,1D
+  24               	;PC2	 3		2F,2G,2E,P
+  25               	;PC3	 4		2A,2B,2C,2D
+  26               	
+  27               	;PA3	 5		COM4
+  28               	;PA2	 6		COM3
+  29               	;PA1	 7		COM2
+  30               	;PA0	 8		COM1
+  31               	
+  32               	;COM1-4 driving
+  33               	;--------------
+  34               	;PA outputs are set as output one at a time.
+  35               	;1.5k pull-ups and pull-downs generate the half bias for floating outputs
+  36               	
+  37               	;Segments display
+  38               	;----------------
+  39               	;Read the hex value to display from port D.
+  40               	;Read the 7 segment values for high and low nibbles
+  41               	;Check which segments are on from the 2 7-segment values
+  42               	;Dot (P) is not used
+  43               	
+  44               	;Input on PD(7-0)
+  45               	
+  46               	;R20	Low nibble 7-segment value
+  47               	;R21	High nibble 7-segment value
+  48               	;R22	scan lines
+  49               	
+  50               			.include "iotiny48.inc"
+   1               	;   Copyright (c 2007 Atmel Corporation
+   2               	;   All rights reserved.
+   3               	;
+   4               	;   Redistribution and use in source and binary forms, with or without
+   5               	;   modification, are permitted provided that the following conditions are met:
+   6               	;
+   7               	;   * Redistributions of source code must retain the above copyright
+   8               	;     notice, this list of conditions and the following disclaimer.
+   9               	;
+  10               	;   * Redistributions in binary form must reproduce the above copyright
+  11               	;     notice, this list of conditions and the following disclaimer in
+  12               	;     the documentation and/or other materials provided with the
+  13               	;     distribution.
+  14               	;
+  15               	;   * Neither the name of the copyright holders nor the names of
+  16               	;     contributors may be used to endorse or promote products derived
+  17               	;     from this software without specific prior written permission.
+  18               	;
+  19               	;  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+  20               	;  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+  21               	;  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+  22               	;  ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER OR CONTRIBUTORS BE
+  23               	;  LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+  24               	;  CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+  25               	;  SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+  26               	;  INTERRUPTION HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+  27               	;  CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE
+  28               	;  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+  29               	;  POSSIBILITY OF SUCH DAMAGE. 
+  30               	
+  31               	; $Id: iotn48.h,v 1.4.2.15 2009/03/27 16:26:07 arcanum Exp $
+  32               	
+  33               	.equ SP,   0x3d
+  34               	.equ SPL,  0x3d
+  35               	.equ SPH,  0x3e
+  36               	.equ SREG, 0x3f
+  37               	.equ SREG_C, 0
+  38               	.equ SREG_Z, 1
+  39               	.equ SREG_N, 2
+  40               	.equ SREG_V, 3
+  41               	.equ SREG_S, 4
+  42               	.equ SREG_H, 5
+  43               	.equ SREG_T, 6
+  44               	.equ SREG_I, 7
+  45               	
+  46               	
+  47               	; Registers and associated bit numbers
+  48               	
+  49               	.equ PINB, 0x03
+  50               	.equ PINB0, 0
+  51               	.equ PINB1, 1
+  52               	.equ PINB2, 2
+  53               	.equ PINB3, 3
+  54               	.equ PINB4, 4
+  55               	.equ PINB5, 5
+  56               	.equ PINB6, 6
+  57               	.equ PINB7, 7
+  58               	
+  59               	.equ DDRB, 0x04
+  60               	.equ DDB0, 0
+  61               	.equ DDB1, 1
+  62               	.equ DDB2, 2
+  63               	.equ DDB3, 3
+  64               	.equ DDB4, 4
+  65               	.equ DDB5, 5
+  66               	.equ DDB6, 6
+  67               	.equ DDB7, 7
+  68               	
+  69               	.equ PORTB, 0x05
+  70               	.equ PORTB0, 0
+  71               	.equ PORTB1, 1
+  72               	.equ PORTB2, 2
+  73               	.equ PORTB3, 3
+  74               	.equ PORTB4, 4
+  75               	.equ PORTB5, 5
+  76               	.equ PORTB6, 6
+  77               	.equ PORTB7, 7
+  78               	
+  79               	.equ PINC, 0x06
+  80               	.equ PINC0, 0
+  81               	.equ PINC1, 1
+  82               	.equ PINC2, 2
+  83               	.equ PINC3, 3
+  84               	.equ PINC4, 4
+  85               	.equ PINC5, 5
+  86               	.equ PINC6, 6
+  87               	.equ PINC7, 7
+  88               	
+  89               	.equ DDRC, 0x07
+  90               	.equ DDC0, 0
+  91               	.equ DDC1, 1
+  92               	.equ DDC2, 2
+  93               	.equ DDC3, 3
+  94               	.equ DDC4, 4
+  95               	.equ DDC5, 5
+  96               	.equ DDC6, 6
+  97               	.equ DDC7, 7
+  98               	
+  99               	.equ PORTC, 0x08
+ 100               	.equ PORTC0, 0
+ 101               	.equ PORTC1, 1
+ 102               	.equ PORTC2, 2
+ 103               	.equ PORTC3, 3
+ 104               	.equ PORTC4, 4
+ 105               	.equ PORTC5, 5
+ 106               	.equ PORTC6, 6
+ 107               	.equ PORTC7, 7
+ 108               	
+ 109               	.equ PIND, 0x09
+ 110               	.equ PIND0, 0
+ 111               	.equ PIND1, 1
+ 112               	.equ PIND2, 2
+ 113               	.equ PIND3, 3
+ 114               	.equ PIND4, 4
+ 115               	.equ PIND5, 5
+ 116               	.equ PIND6, 6
+ 117               	.equ PIND7, 7
+ 118               	
+ 119               	.equ DDRD, 0x0A
+ 120               	.equ DDD0, 0
+ 121               	.equ DDD1, 1
+ 122               	.equ DDD2, 2
+ 123               	.equ DDD3, 3
+ 124               	.equ DDD4, 4
+ 125               	.equ DDD5, 5
+ 126               	.equ DDD6, 6
+ 127               	.equ DDD7, 7
+ 128               	
+ 129               	.equ PORTD, 0x0B
+ 130               	.equ PORTD0, 0
+ 131               	.equ PORTD1, 1
+ 132               	.equ PORTD2, 2
+ 133               	.equ PORTD3, 3
+ 134               	.equ PORTD4, 4
+ 135               	.equ PORTD5, 5
+ 136               	.equ PORTD6, 6
+ 137               	.equ PORTD7, 7
+ 138               	
+ 139               	.equ PINA, 0x0C
+ 140               	.equ PINA0, 0
+ 141               	.equ PINA1, 1
+ 142               	.equ PINA2, 2
+ 143               	.equ PINA3, 3
+ 144               	
+ 145               	.equ DDRA, 0x0D
+ 146               	.equ DDA0, 0
+ 147               	.equ DDA1, 1
+ 148               	.equ DDA2, 2
+ 149               	.equ DDA3, 3
+ 150               	
+ 151               	.equ PORTA, 0x0E
+ 152               	.equ PORTA0, 0
+ 153               	.equ PORTA1, 1
+ 154               	.equ PORTA2, 2
+ 155               	.equ PORTA3, 3
+ 156               	
+ 157               	.equ PORTCR, 0x12
+ 158               	.equ PUDA, 0
+ 159               	.equ PUDB, 1
+ 160               	.equ PUDC, 2
+ 161               	.equ PUDD, 3
+ 162               	.equ BBMA, 4
+ 163               	.equ BBMB, 5
+ 164               	.equ BBMC, 6
+ 165               	.equ BBMD, 7
+ 166               	
+ 167               	.equ TIFR0, 0x15
+ 168               	.equ TOV0, 0
+ 169               	.equ OCF0A, 1
+ 170               	.equ OCF0B, 2
+ 171               	
+ 172               	.equ TIFR1, 0x16
+ 173               	.equ TOV1, 0
+ 174               	.equ OCF1A, 1
+ 175               	.equ OCF1B, 2
+ 176               	.equ ICF1, 5
+ 177               	
+ 178               	.equ PCIFR, 0x1B
+ 179               	.equ PCIF0, 0
+ 180               	.equ PCIF1, 1
+ 181               	.equ PCIF2, 2
+ 182               	.equ PCIF3, 3
+ 183               	
+ 184               	.equ EIFR, 0x1C
+ 185               	.equ INTF0, 0
+ 186               	.equ INTF1, 1
+ 187               	
+ 188               	.equ EIMSK, 0x1D
+ 189               	.equ INT0, 0
+ 190               	.equ INT1, 1
+ 191               	
+ 192               	.equ GPIOR0, 0x1E
+ 193               	.equ GPIOR00, 0
+ 194               	.equ GPIOR01, 1
+ 195               	.equ GPIOR02, 2
+ 196               	.equ GPIOR03, 3
+ 197               	.equ GPIOR04, 4
+ 198               	.equ GPIOR05, 5
+ 199               	.equ GPIOR06, 6
+ 200               	.equ GPIOR07, 7
+ 201               	
+ 202               	.equ EECR, 0x1F
+ 203               	.equ EERE, 0
+ 204               	.equ EEPE, 1
+ 205               	.equ EEMPE, 2
+ 206               	.equ EERIE, 3
+ 207               	.equ EEPM0, 4
+ 208               	.equ EEPM1, 5
+ 209               	
+ 210               	.equ EEDR, 0x20
+ 211               	.equ EEDR0, 0
+ 212               	.equ EEDR1, 1
+ 213               	.equ EEDR2, 2
+ 214               	.equ EEDR3, 3
+ 215               	.equ EEDR4, 4
+ 216               	.equ EEDR5, 5
+ 217               	.equ EEDR6, 6
+ 218               	.equ EEDR7, 7
+ 219               	
+ 220               	.equ EEARL, 0x21
+ 221               	.equ EEAR0, 0
+ 222               	.equ EEAR1, 1
+ 223               	.equ EEAR2, 2
+ 224               	.equ EEAR3, 3
+ 225               	.equ EEAR4, 4
+ 226               	.equ EEAR5, 5
+ 227               	.equ EEAR6, 6
+ 228               	.equ EEAR7, 7
+ 229               	
+ 230               	.equ GTCCR, 0x23
+ 231               	.equ PSRSYNC, 0
+ 232               	.equ TSM, 7
+ 233               	
+ 234               	.equ TCCR0A, 0x25
+ 235               	.equ CS00, 0
+ 236               	.equ CS01, 1
+ 237               	.equ CS02, 2
+ 238               	.equ CTC0, 3
+ 239               	
+ 240               	.equ TCNT0, 0x26
+ 241               	.equ TCNT0_0, 0
+ 242               	.equ TCNT0_1, 1
+ 243               	.equ TCNT0_2, 2
+ 244               	.equ TCNT0_3, 3
+ 245               	.equ TCNT0_4, 4
+ 246               	.equ TCNT0_5, 5
+ 247               	.equ TCNT0_6, 6
+ 248               	.equ TCNT0_7, 7
+ 249               	
+ 250               	.equ OCR0A, 0x27
+ 251               	.equ OCR0A_0, 0
+ 252               	.equ OCR0A_1, 1
+ 253               	.equ OCR0A_2, 2
+ 254               	.equ OCR0A_3, 3
+ 255               	.equ OCR0A_4, 4
+ 256               	.equ OCR0A_5, 5
+ 257               	.equ OCR0A_6, 6
+ 258               	.equ OCR0A_7, 7
+ 259               	
+ 260               	.equ OCR0B, 0x28
+ 261               	.equ OCR0B_0, 0
+ 262               	.equ OCR0B_1, 1
+ 263               	.equ OCR0B_2, 2
+ 264               	.equ OCR0B_3, 3
+ 265               	.equ OCR0B_4, 4
+ 266               	.equ OCR0B_5, 5
+ 267               	.equ OCR0B_6, 6
+ 268               	.equ OCR0B_7, 7
+ 269               	
+ 270               	.equ GPIOR1, 0x2A
+ 271               	.equ GPIOR10, 0
+ 272               	.equ GPIOR11, 1
+ 273               	.equ GPIOR12, 2
+ 274               	.equ GPIOR13, 3
+ 275               	.equ GPIOR14, 4
+ 276               	.equ GPIOR15, 5
+ 277               	.equ GPIOR16, 6
+ 278               	.equ GPIOR17, 7
+ 279               	
+ 280               	.equ GPIOR2, 0x2B
+ 281               	.equ GPIOR20, 0
+ 282               	.equ GPIOR21, 1
+ 283               	.equ GPIOR22, 2
+ 284               	.equ GPIOR23, 3
+ 285               	.equ GPIOR24, 4
+ 286               	.equ GPIOR25, 5
+ 287               	.equ GPIOR26, 6
+ 288               	.equ GPIOR27, 7
+ 289               	
+ 290               	.equ SPCR, 0x2C
+ 291               	.equ SPR0, 0
+ 292               	.equ SPR1, 1
+ 293               	.equ CPHA, 2
+ 294               	.equ CPOL, 3
+ 295               	.equ MSTR, 4
+ 296               	.equ DORD, 5
+ 297               	.equ SPE, 6
+ 298               	.equ SPIE, 7
+ 299               	
+ 300               	.equ SPSR, 0x2D
+ 301               	.equ SPI2X, 0
+ 302               	.equ WCOL, 6
+ 303               	.equ SPIF, 7
+ 304               	
+ 305               	.equ SPDR, 0x2E
+ 306               	.equ SPDR0, 0
+ 307               	.equ SPDR1, 1
+ 308               	.equ SPDR2, 2
+ 309               	.equ SPDR3, 3
+ 310               	.equ SPDR4, 4
+ 311               	.equ SPDR5, 5
+ 312               	.equ SPDR6, 6
+ 313               	.equ SPDR7, 7
+ 314               	
+ 315               	.equ ACSR, 0x30
+ 316               	.equ ACIS0, 0
+ 317               	.equ ACIS1, 1
+ 318               	.equ ACIC, 2
+ 319               	.equ ACIE, 3
+ 320               	.equ ACI, 4
+ 321               	.equ ACO, 5
+ 322               	.equ ACBG, 6
+ 323               	.equ ACD, 7
+ 324               	
+ 325               	.equ SMCR, 0x33
+ 326               	.equ SE, 0
+ 327               	.equ SM0, 1
+ 328               	.equ SM1, 2
+ 329               	
+ 330               	.equ MCUSR, 0x34
+ 331               	.equ PORF, 0
+ 332               	.equ EXTRF, 1
+ 333               	.equ BORF, 2
+ 334               	.equ WDRF, 3
+ 335               	
+ 336               	.equ MCUCR, 0x35
+ 337               	.equ PUD, 4
+ 338               	.equ BODSE, 5
+ 339               	.equ BODS, 6
+ 340               	
+ 341               	.equ SPMCSR, 0x37
+ 342               	.equ SELFPRGEN, 0
+ 343               	.equ PGERS, 1
+ 344               	.equ PGWRT, 2
+ 345               	.equ RFLB, 3
+ 346               	.equ CTPB, 4
+ 347               	.equ RWWSB, 6
+ 348               	
+ 349               	.equ WDTCSR, 0x60
+ 350               	.equ WDP0, 0
+ 351               	.equ WDP1, 1
+ 352               	.equ WDP2, 2
+ 353               	.equ WDE, 3
+ 354               	.equ WDCE, 4
+ 355               	.equ WDP3, 5
+ 356               	.equ WDIE, 6
+ 357               	.equ WDIF, 7
+ 358               	
+ 359               	.equ CLKPR, 0x61
+ 360               	.equ CLKPS0, 0
+ 361               	.equ CLKPS1, 1
+ 362               	.equ CLKPS2, 2
+ 363               	.equ CLKPS3, 3
+ 364               	.equ CLKPCE, 7
+ 365               	
+ 366               	.equ PRR, 0x64
+ 367               	.equ PRADC, 0
+ 368               	.equ PRSPI, 2
+ 369               	.equ PRTIM1, 3
+ 370               	.equ PRTIM0, 5
+ 371               	.equ PRTWI, 7
+ 372               	
+ 373               	.equ OSCCAL, 0x66
+ 374               	.equ CAL0, 0
+ 375               	.equ CAL1, 1
+ 376               	.equ CAL2, 2
+ 377               	.equ CAL3, 3
+ 378               	.equ CAL4, 4
+ 379               	.equ CAL5, 5
+ 380               	.equ CAL6, 6
+ 381               	.equ CAL7, 7
+ 382               	
+ 383               	.equ PCICR, 0x68
+ 384               	.equ PCIE0, 0
+ 385               	.equ PCIE1, 1
+ 386               	.equ PCIE2, 2
+ 387               	.equ PCIE3, 3
+ 388               	
+ 389               	.equ EICRA, 0x69
+ 390               	.equ ISC00, 0
+ 391               	.equ ISC01, 1
+ 392               	.equ ISC10, 2
+ 393               	.equ ISC11, 3
+ 394               	
+ 395               	.equ PCMSK3, 0x6A
+ 396               	.equ PCINT24, 0
+ 397               	.equ PCINT25, 1
+ 398               	.equ PCINT26, 2
+ 399               	.equ PCINT27, 3
+ 400               	
+ 401               	.equ PCMSK0, 0x6B
+ 402               	.equ PCINT0, 0
+ 403               	.equ PCINT1, 1
+ 404               	.equ PCINT2, 2
+ 405               	.equ PCINT3, 3
+ 406               	.equ PCINT4, 4
+ 407               	.equ PCINT5, 5
+ 408               	.equ PCINT6, 6
+ 409               	.equ PCINT7, 7
+ 410               	
+ 411               	.equ PCMSK1, 0x6C
+ 412               	.equ PCINT8, 0
+ 413               	.equ PCINT9, 1
+ 414               	.equ PCINT10, 2
+ 415               	.equ PCINT11, 3
+ 416               	.equ PCINT12, 4
+ 417               	.equ PCINT13, 5
+ 418               	.equ PCINT14, 6
+ 419               	.equ PCINT15, 7
+ 420               	
+ 421               	.equ PCMSK2, 0x6D
+ 422               	.equ PCINT16, 0
+ 423               	.equ PCINT17, 1
+ 424               	.equ PCINT18, 2
+ 425               	.equ PCINT19, 3
+ 426               	.equ PCINT20, 4
+ 427               	.equ PCINT21, 5
+ 428               	.equ PCINT22, 6
+ 429               	.equ PCINT23, 7
+ 430               	
+ 431               	.equ TIMSK0, 0x6E
+ 432               	.equ TOIE0, 0
+ 433               	.equ OCIE0A, 1
+ 434               	.equ OCIE0B, 2
+ 435               	
+ 436               	.equ TIMSK1, 0x6F
+ 437               	.equ TOIE1, 0
+ 438               	.equ OCIE1A, 1
+ 439               	.equ OCIE1B, 2
+ 440               	.equ ICIE1, 5
+ 441               	
+ 442               	.equ ADCW, 0x78
+ 443               	
+ 444               	.equ ADCL, 0x78
+ 445               	.equ ADCL0, 0
+ 446               	.equ ADCL1, 1
+ 447               	.equ ADCL2, 2
+ 448               	.equ ADCL3, 3
+ 449               	.equ ADCL4, 4
+ 450               	.equ ADCL5, 5
+ 451               	.equ ADCL6, 6
+ 452               	.equ ADCL7, 7
+ 453               	
+ 454               	.equ ADCH, 0x79
+ 455               	.equ ADCH0, 0
+ 456               	.equ ADCH1, 1
+ 457               	.equ ADCH2, 2
+ 458               	.equ ADCH3, 3
+ 459               	.equ ADCH4, 4
+ 460               	.equ ADCH5, 5
+ 461               	.equ ADCH6, 6
+ 462               	.equ ADCH7, 7
+ 463               	
+ 464               	.equ ADCSRA, 0x7A
+ 465               	.equ ADPS0, 0
+ 466               	.equ ADPS1, 1
+ 467               	.equ ADPS2, 2
+ 468               	.equ ADIE, 3
+ 469               	.equ ADIF, 4
+ 470               	.equ ADATE, 5
+ 471               	.equ ADSC, 6
+ 472               	.equ ADEN, 7
+ 473               	
+ 474               	.equ ADCSRB, 0x7B
+ 475               	.equ ADTS0, 0
+ 476               	.equ ADTS1, 1
+ 477               	.equ ADTS2, 2
+ 478               	.equ ACME, 6
+ 479               	
+ 480               	.equ ADMUX, 0x7C
+ 481               	.equ MUX0, 0
+ 482               	.equ MUX1, 1
+ 483               	.equ MUX2, 2
+ 484               	.equ MUX3, 3
+ 485               	.equ ADLAR, 5
+ 486               	.equ REFS0, 6
+ 487               	
+ 488               	.equ DIDR0, 0x7E
+ 489               	.equ ADC0D, 0
+ 490               	.equ ADC1D, 1
+ 491               	.equ ADC2D, 2
+ 492               	.equ ADC3D, 3
+ 493               	.equ ADC4D, 4
+ 494               	.equ ADC5D, 5
+ 495               	.equ ADC6D, 6
+ 496               	.equ ADC7D, 7
+ 497               	
+ 498               	.equ DIDR1, 0x7F
+ 499               	.equ AIN0D, 0
+ 500               	.equ AIN1D, 1
+ 501               	
+ 502               	.equ TCCR1A, 0x80
+ 503               	.equ WGM10, 0
+ 504               	.equ WGM11, 1
+ 505               	.equ COM1B0, 4
+ 506               	.equ COM1B1, 5
+ 507               	.equ COM1A0, 6
+ 508               	.equ COM1A1, 7
+ 509               	
+ 510               	.equ TCCR1B, 0x81
+ 511               	.equ CS10, 0
+ 512               	.equ CS11, 1
+ 513               	.equ CS12, 2
+ 514               	.equ WGM12, 3
+ 515               	.equ WGM13, 4
+ 516               	.equ ICES1, 6
+ 517               	.equ ICNC1, 7
+ 518               	
+ 519               	.equ TCCR1C, 0x82
+ 520               	.equ FOC1B, 6
+ 521               	.equ FOC1A, 7
+ 522               	
+ 523               	.equ TCNT1, 0x84
+ 524               	
+ 525               	.equ TCNT1L, 0x84
+ 526               	.equ TCNT1L0, 0
+ 527               	.equ TCNT1L1, 1
+ 528               	.equ TCNT1L2, 2
+ 529               	.equ TCNT1L3, 3
+ 530               	.equ TCNT1L4, 4
+ 531               	.equ TCNT1L5, 5
+ 532               	.equ TCNT1L6, 6
+ 533               	.equ TCNT1L7, 7
+ 534               	
+ 535               	.equ TCNT1H, 0x85
+ 536               	.equ TCNT1H0, 0
+ 537               	.equ TCNT1H1, 1
+ 538               	.equ TCNT1H2, 2
+ 539               	.equ TCNT1H3, 3
+ 540               	.equ TCNT1H4, 4
+ 541               	.equ TCNT1H5, 5
+ 542               	.equ TCNT1H6, 6
+ 543               	.equ TCNT1H7, 7
+ 544               	
+ 545               	.equ ICR1, 0x86
+ 546               	
+ 547               	.equ ICR1L, 0x86
+ 548               	.equ ICR1L0, 0
+ 549               	.equ ICR1L1, 1
+ 550               	.equ ICR1L2, 2
+ 551               	.equ ICR1L3, 3
+ 552               	.equ ICR1L4, 4
+ 553               	.equ ICR1L5, 5
+ 554               	.equ ICR1L6, 6
+ 555               	.equ ICR1L7, 7
+ 556               	
+ 557               	.equ ICR1H, 0x87
+ 558               	.equ ICR1H0, 0
+ 559               	.equ ICR1H1, 1
+ 560               	.equ ICR1H2, 2
+ 561               	.equ ICR1H3, 3
+ 562               	.equ ICR1H4, 4
+ 563               	.equ ICR1H5, 5
+ 564               	.equ ICR1H6, 6
+ 565               	.equ ICR1H7, 7
+ 566               	
+ 567               	.equ OCR1A, 0x88
+ 568               	
+ 569               	.equ OCR1AL, 0x88
+ 570               	.equ OCR1AL0, 0
+ 571               	.equ OCR1AL1, 1
+ 572               	.equ OCR1AL2, 2
+ 573               	.equ OCR1AL3, 3
+ 574               	.equ OCR1AL4, 4
+ 575               	.equ OCR1AL5, 5
+ 576               	.equ OCR1AL6, 6
+ 577               	.equ OCR1AL7, 7
+ 578               	
+ 579               	.equ OCR1AH, 0x89
+ 580               	.equ OCR1AH0, 0
+ 581               	.equ OCR1AH1, 1
+ 582               	.equ OCR1AH2, 2
+ 583               	.equ OCR1AH3, 3
+ 584               	.equ OCR1AH4, 4
+ 585               	.equ OCR1AH5, 5
+ 586               	.equ OCR1AH6, 6
+ 587               	.equ OCR1AH7, 7
+ 588               	
+ 589               	.equ OCR1B, 0x8A
+ 590               	
+ 591               	.equ OCR1BL, 0x8A
+ 592               	.equ OCR1BL0, 0
+ 593               	.equ OCR1BL1, 1
+ 594               	.equ OCR1BL2, 2
+ 595               	.equ OCR1BL3, 3
+ 596               	.equ OCR1BL4, 4
+ 597               	.equ OCR1BL5, 5
+ 598               	.equ OCR1BL6, 6
+ 599               	.equ OCR1BL7, 7
+ 600               	
+ 601               	.equ OCR1BH, 0x8B
+ 602               	.equ OCR1BH0, 0
+ 603               	.equ OCR1BH1, 1
+ 604               	.equ OCR1BH2, 2
+ 605               	.equ OCR1BH3, 3
+ 606               	.equ OCR1BH4, 4
+ 607               	.equ OCR1BH5, 5
+ 608               	.equ OCR1BH6, 6
+ 609               	.equ OCR1BH7, 7
+ 610               	
+ 611               	.equ TWBR, 0xB8
+ 612               	.equ TWBR0, 0
+ 613               	.equ TWBR1, 1
+ 614               	.equ TWBR2, 2
+ 615               	.equ TWBR3, 3
+ 616               	.equ TWBR4, 4
+ 617               	.equ TWBR5, 5
+ 618               	.equ TWBR6, 6
+ 619               	.equ TWBR7, 7
+ 620               	
+ 621               	.equ TWSR, 0xB9
+ 622               	.equ TWPS0, 0
+ 623               	.equ TWPS1, 1
+ 624               	.equ TWS3, 2
+ 625               	.equ TWS4, 3
+ 626               	.equ TWS5, 4
+ 627               	.equ TWS6, 5
+ 628               	.equ TWS7, 6
+ 629               	
+ 630               	.equ TWAR, 0xBA
+ 631               	.equ TWGCE, 0
+ 632               	.equ TWA0, 1
+ 633               	.equ TWA1, 2
+ 634               	.equ TWA2, 3
+ 635               	.equ TWA3, 4
+ 636               	.equ TWA4, 5
+ 637               	.equ TWA5, 6
+ 638               	.equ TWA6, 7
+ 639               	
+ 640               	.equ TWDR, 0xBB
+ 641               	.equ TWD0, 0
+ 642               	.equ TWD1, 1
+ 643               	.equ TWD2, 2
+ 644               	.equ TWD3, 3
+ 645               	.equ TWD4, 4
+ 646               	.equ TWD5, 5
+ 647               	.equ TWD6, 6
+ 648               	.equ TWD7, 7
+ 649               	
+ 650               	.equ TWCR, 0xBC
+ 651               	.equ TWIE, 0
+ 652               	.equ TWEN, 2
+ 653               	.equ TWWC, 3
+ 654               	.equ TWSTO, 4
+ 655               	.equ TWSTA, 5
+ 656               	.equ TWEA, 6
+ 657               	.equ TWINT, 7
+ 658               	
+ 659               	.equ TWAMR, 0xBD
+ 660               	.equ TWAM0, 1
+ 661               	.equ TWAM1, 2
+ 662               	.equ TWAM2, 3
+ 663               	.equ TWAM3, 4
+ 664               	.equ TWAM4, 5
+ 665               	.equ TWAM5, 6
+ 666               	.equ TWAM6, 7
+ 667               	
+ 668               	.equ TWHSR, 0xBE
+ 669               	.equ TWIHS, 0
+ 670               	
+ 671               	
+ 672               	; Interrupt Vectors
+ 673               	; Interrupt vector 0 is the reset vector.
+ 674               	
+ 675               	;.equ INT0_vect         _VECTOR(1)
+ 676               	;.equ INT1_vect         _VECTOR(2)
+ 677               	;.equ PCINT0_vect       _VECTOR(3)
+ 678               	;.equ PCINT1_vect       _VECTOR(4)
+ 679               	;.equ PCINT2_vect       _VECTOR(5)
+ 680               	;.equ PCINT3_vect       _VECTOR(6)
+ 681               	;.equ WDT_vect          _VECTOR(7)
+ 682               	;.equ TIMER1_CAPT_vect  _VECTOR(8)
+ 683               	;.equ TIMER1_COMPA_vect _VECTOR(9)
+ 684               	;.equ TIMER1_COMPB_vect _VECTOR(10)
+ 685               	;.equ TIMER1_OVF_vect   _VECTOR(11)
+ 686               	;.equ TIMER0_COMPA_vect _VECTOR(12)
+ 687               	;.equ TIMER0_COMPB_vect _VECTOR(13)
+ 688               	;.equ TIMER0_OVF_vect   _VECTOR(14)
+ 689               	;.equ SPI_STC_vect      _VECTOR(15)
+ 690               	;.equ ADC_vect          _VECTOR(16)
+ 691               	;.equ EE_READY_vect     _VECTOR(17)
+ 692               	;.equ ANALOG_COMP_vect  _VECTOR(18)
+ 693               	;.equ TWI_vect          _VECTOR(19)
+ 694               	
+ 695               	;.equ _VECTORS_SIZE 40
+ 696               	
+ 697               	
+ 698               	; Constants
+ 699               	.equ SPM_PAGESIZE, 32
+ 700               	.equ RAMEND,       0x1FF
+ 701               	.equ XRAMSIZE,     0
+ 702               	.equ XRAMEND,      RAMEND
+ 703               	.equ E2END,        0x3F
+ 704               	.equ E2PAGESIZE,   4
+ 705               	.equ FLASHEND,     0xFFF
+ 706               	
+ 707               	
+ 708               	; Fuse Information
+ 709               	.equ FUSE_MEMORY_SIZE, 3
+ 710               	
+ 711               	; Low Fuse Byte
+ 712               	.equ FUSE_CKDIV8, 0x80 ; Divide clock by 8
+ 713               	.equ FUSE_CKOUT,  0x40 ; Clock output
+ 714               	.equ FUSE_SUT1,   0x20 ; Select start-up time
+ 715               	.equ FUSE_SUT0,   0x10 ; Select start-up time
+ 716               	.equ FUSE_CKSEL3, 0x08 ; Select Clock Source
+ 717               	.equ FUSE_CKSEL2, 0x04 ; Select Clock Source
+ 718               	.equ FUSE_CKSEL1, 0x02 ; Select Clock Source
+ 719               	.equ FUSE_CKSEL0, 0x01 ; Select Clock Source
+ 720               	.equ LFUSE_DEFAULT, (FUSE_CKSEL0 & FUSE_CKSEL2 & FUSE_CKSEL3 & FUSE_SUT0 & FUSE_CKDIV8)
+ 721               	
+ 722               	; High Fuse Byte
+ 723               	.equ FUSE_BODLEVEL0,   0x01 ; Brown-out Detector trigger level
+ 724               	.equ FUSE_BODLEVEL1,   0x02 ; Brown-out Detector trigger level
+ 725               	.equ FUSE_BODLEVEL2,   0x04 ; Brown-out Detector trigger level
+ 726               	.equ FUSE_EESAVE,      0x08 ; EEPROM memory is preserved through chip erase
+ 727               	.equ FUSE_WDTON,       0x10 ; Watchdog Timer Always On
+ 728               	.equ FUSE_SPIEN,       0x20 ; Enable Serial programming and Data Downloading
+ 729               	.equ FUSE_DWEN,        0x40 ; debugWIRE Enable
+ 730               	.equ FUSE_RSTDISBL,    0x80 ; External reset disable
+ 731               	.equ HFUSE_DEFAULT, (FUSE_SPIEN)
+ 732               	
+ 733               	; Extended Fuse Byte
+ 734               	.equ FUSE_SELFPRGEN,   0x01 ; Self Programming Enable
+ 735               	.equ EFUSE_DEFAULT, 0xFF
+ 736               	
+ 737               	
+ 738               	; Lock Bits
+ 739               	.equ __LOCK_BITS_EXIST, 1
+ 740               	
+ 741               	
+ 742               	; Signature
+ 743               	.equ SIGNATURE_0, 0x1E
+ 744               	.equ SIGNATURE_1, 0x92
+ 745               	.equ SIGNATURE_2, 0x09
+  51               			.include "macros.inc"
+ 679               	        .list
+  52               	
+  53               	;-----------------------------------------------
+  54               	setup:
+  55               			;initialize SP
+  56 0000 0FED      			ldi		r16,0xDF
+  57 0002 0DBF      			out		SPL,r16
+  58               	
+  59               			;hexadecimal input to display
+  60 0004 0027      			clr		r16
+  61 0006 0AB9      			out		DDRD,r16
+  62               	
+  63               			;7-segment drive
+  64 0008 0FE0      			ldi		r16,0x0F
+  65 000a 07B9      			out		DDRC,r16
+  66               	
+  67               			;Scope trigger
+  68               			;ldi		r16,1
+  69               			;out		DDRB,r16
+  70               	
+  71               	;-----------------------------------------------
+  72               			;clr		r24
+  73               	loop:
+  74 000c 09B1      			in		r16,PIND
+  75               	
+  76               			;mov		r16,r24
+  77 000e 00D0      			rcall	get7segValue	;in R21,R20
+  78 0010 00D0      			rcall	displayLcd
+  79               			;inc		r24
+  80 0012 00C0      			rjmp	loop
+  81               	
+  82               	;-----------------------------------------------
+  83               	;Check segments to drive
+  84               	;76543210
+  85               	;-GFEDCBA
+  86               	checkSegs:
+  87 0014 0027      			clr		r16
+  88               	
+  89 0016 6130      			cpi		r22,0x01
+  90 0018 01F4      			brne	1f
+  91               				;0	1F	r21,5
+  92               				;1	1A	r21,0
+  93               				;2	2F	r20,5
+  94               				;3	2A	r20,0
+  95 001a 55FD      				sbrc	r21,5
+  96 001c 0160      				sbr		r16,0x01
+  97 001e 50FD      				sbrc	r21,0
+  98 0020 0260      				sbr		r16,0x02
+  99 0022 45FD      				sbrc	r20,5
+ 100 0024 0460      				sbr		r16,0x04
+ 101 0026 40FD      				sbrc	r20,0
+ 102 0028 0860      				sbr		r16,0x08
+ 103 002a 0895      				ret
+ 104               	1:		
+ 105 002c 6230      			cpi		r22,0x02
+ 106 002e 01F4      			brne	2f
+ 107               				;0	1G	r21,6
+ 108               				;1	1B	r21,1
+ 109               				;2	2G	r20,6
+ 110               				;3	2B	r20,1
+ 111 0030 56FD      				sbrc	r21,6
+ 112 0032 0160      				sbr		r16,0x01
+ 113 0034 51FD      				sbrc	r21,1
+ 114 0036 0260      				sbr		r16,0x02
+ 115 0038 46FD      				sbrc	r20,6
+ 116 003a 0460      				sbr		r16,0x04
+ 117 003c 41FD      				sbrc	r20,1
+ 118 003e 0860      				sbr		r16,0x08
+ 119 0040 0895      				ret
+ 120               	2:		
+ 121 0042 6430      			cpi		r22,0x04
+ 122 0044 01F4      			brne	3f
+ 123               				;0	1E	r21,4
+ 124               				;1	1C	r21,2
+ 125               				;2	2E	r20,4
+ 126               				;3	2C	r20,2
+ 127 0046 54FD      				sbrc	r21,4
+ 128 0048 0160      				sbr		r16,0x01
+ 129 004a 52FD      				sbrc	r21,2
+ 130 004c 0260      				sbr		r16,0x02
+ 131 004e 44FD      				sbrc	r20,4
+ 132 0050 0460      				sbr		r16,0x04
+ 133 0052 42FD      				sbrc	r20,2
+ 134 0054 0860      				sbr		r16,0x08
+ 135 0056 0895      				ret
+ 136 0058 6830      	3:		cpi		r22,0x08
+ 137 005a 01F4      			brne	4f
+ 138               				;0	-
+ 139               				;1	1D	r21,3
+ 140               				;2	P
+ 141               				;3	2D	r20,3
+ 142 005c 53FD      				sbrc	r21,3
+ 143 005e 0260      				sbr		r16,0x02
+ 144 0060 43FD      				sbrc	r20,3
+ 145 0062 0860      				sbr		r16,0x08
+ 146 0064 0895      				ret
+ 147 0066 0895      	4:		ret
+ 148               	
+ 149               	;Make one scan
+ 150               	displayLcd:
+ 151 0068 6F93 7F93 			PUSH_V
+ 152 006c 72E3      			ldi		r23,50
+ 153               	1:
+ 154               			;DDRA: only one output active to scan the COM1-4
+ 155 006e 61E0      				ldi		r22,0x01
+ 156               	2:
+ 157               				;DDRA: only one output active to scan the COM1-4
+ 158 0070 6DB9      				out		DDRA,r22
+ 159               				;out		PORTB,r22
+ 160               	
+ 161 0072 00D0      				rcall	checkSegs
+ 162               	
+ 163 0074 0095      				com		r16
+ 164               	
+ 165               				;Toggle current scan line
+ 166 0076 6EB9      				out		PORTA,r22
+ 167 0078 08B9      				out		PORTC,r16
+ 168 007a 00D0      				rcall	delay1ms
+ 169               	
+ 170 007c 6095      				com		r22
+ 171 007e 0095      				com		r16
+ 172               	
+ 173 0080 6EB9      				out		PORTA,r22
+ 174 0082 08B9      				out		PORTC,r16
+ 175 0084 00D0      				rcall	delay1ms
+ 176               	
+ 177 0086 6095      				com		r22			;restore r22
+ 178               	
+ 179 0088 660F      				lsl		r22
+ 180 008a 6031      				cpi		r22,0x10
+ 181 008c 01F4      				brne	2b
+ 182               	
+ 183 008e 7A95      			dec		r23
+ 184 0090 01F4      			brne	1b
+ 185               	
+ 186 0092 7F91 6F91 			POP_V
+ 187 0096 0895      			ret
+ 188               	
+ 189               	;Returns the 7-segment values into R21,R20
+ 190               	get7segValue:
+ 191 0098 0F93      			push	r16
+ 192               			
+ 193 009a 0F70      			andi	r16,0x0f
+ 194 009c 00D0      			rcall	get7seg
+ 195 009e 402F      			mov		r20,r16
+ 196               	
+ 197 00a0 0F91      			pop		r16
+ 198               	
+ 199 00a2 0695      			lsr		r16
+ 200 00a4 0695      			lsr		r16
+ 201 00a6 0695      			lsr		r16
+ 202 00a8 0695      			lsr		r16
+ 203               			
+ 204 00aa 00D0      			rcall	get7seg
+ 205 00ac 502F      			mov		r21,r16
+ 206 00ae 0895      			ret
+ 207               	
+ 208               	get7seg:
+ 209 00b0 E0E0 F0E0 			LDI_Z 	tabseg
+ 210               	
+ 211 00b4 E00F      			add		r30,r16
+ 212 00b6 0491      			lpm		r16,Z
+ 213 00b8 0895      			ret
+ 214               	
+ 215               	;R26 N ms delay
+ 216               	;R26 modified
+ 217               	delayNms:
+ 218               	1:
+ 219 00ba 00D0      			rcall	delay1ms
+ 220 00bc 1197      			sbiw	r26,1
+ 221 00be 01F4      			brne	1b
+ 222 00c0 0895      			ret
+ 223               			
+ 224               	delay1ms:
+ 225 00c2 AF93 BF93 			PUSH_X
+ 226 00c6 AFEF B0E0 			LDI_X 	255
+ 227 00ca 1197      	1:		sbiw	r26,1
+ 228 00cc 01F4      			brne	1b
+ 229 00ce BF91 AF91 			POP_X
+ 230 00d2 0895      			ret
+ 231               	
+ 232               	delay100us:
+ 233 00d4 0000      			nop
+ 234 00d6 AF93 BF93 			PUSH_X
+ 235 00da A5E1 B0E0 			LDI_X 	21
+ 236 00de 1197      	1:		sbiw	r26,1
+ 237 00e0 01F4      			brne	1b
+ 238 00e2 BF91 AF91 			POP_X
+ 239 00e6 0895      			ret
+ 240               	
+ 241               	delay25us:
+ 242 00e8 0000      			nop
+ 243 00ea 0F93      			push	r16
+ 244 00ec 04E0      			ldi		r16,4
+ 245 00ee 0A95      	1:		dec		r16
+ 246 00f0 01F4      			brne	1b
+ 247 00f2 0F91      			pop		r16
+ 248 00f4 0895      			ret
+ 249               	
+ 250               	;=================================================================
+ 251               	; 0		a
+ 252               	; 1		b
+ 253               	; 2		c
+ 254               	; 3		d
+ 255               	; 4		e
+ 256               	; 5		f
+ 257               	; 6		g
+ 258               	; 7		-
+ 259 00f6 3F06 5B4F 	tabseg: .byte 0x3f,0x06,0x5b,0x4f,0x66,0x6d,0x7d,0x07,0x7f,0x6f,0x77,0x7c,0x39,0x5e,0x79,0x71
+ 259      666D 7D07 
+ 259      7F6F 777C 
+ 259      395E 7971 
+ 260               	
